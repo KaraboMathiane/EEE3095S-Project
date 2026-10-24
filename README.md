@@ -11,8 +11,8 @@ The serial interface contract is in [`docs/protocol.md`](./docs/protocol.md).
 
 ```text
 Game_Server/   STM32CubeIDE firmware project
-gui/           Planned Python PC client
-tests/         Planned pytest harness
+gui/           Tkinter PC client and serial transport
+tests/         Host-compiled pytest harness
 docs/          Protocol and project documentation
 report/        Planned final report and submission files
 ```
@@ -22,7 +22,8 @@ report/        Planned final report and submission files
 Phase 1 established the project structure. Phase 2 implements the STM32
 Tic-Tac-Toe game engine, the assignment's newline-framed serial command
 protocol, and a host-compiled pytest harness for game and protocol behavior.
-The Python GUI and final report are still planned for later phases.
+The Tkinter GUI implements the current serial contract. Hardware integration
+and the final report remain to be completed.
 
 ## Firmware setup and build
 
@@ -43,8 +44,34 @@ before wiring. The current firmware retains the initial GPIO LED setup.
 
 ## PC client and tests
 
-The Python client is planned but has not yet been implemented. To run the
-firmware game/protocol tests on a PC, install GCC and Python 3.8 or newer:
+To run the GUI, use Python 3.9 or newer with Tkinter installed (included in
+the standard Windows Python installer). From the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r gui/requirements.txt
+python gui/main.py
+```
+
+Select or type the board's serial port, select Connect, then New game. Both
+players share the same window and alternate X/O. Occupied cells remain
+clickable so rejection messages can be demonstrated. The STM32 decides all
+moves and results; the GUI only draws boards received from the server.
+After a win/draw, it requests STATE to retrieve the final board.
+
+The client uses 115200 8N1 with a two-second reply timeout. A timeout or
+invalid reply closes the connection to avoid assigning a late reply to the
+next command. Reconnect and start a new game to recover. The command log
+helps diagnose integration problems. Close other serial terminals before
+connecting. Flashing through a debug probe does not necessarily expose
+USART1 as a PC serial port; confirm the wiring described above.
+
+The current protocol cannot report whether a STATE board is still in play;
+therefore a new GUI connection requires New game. Hardware-button changes
+and unsolicited updates need a jointly agreed protocol extension.
+
+To run the firmware game/protocol tests on a PC, install GCC and Python:
 
 ```powershell
 python -m venv .venv
