@@ -9,10 +9,14 @@
 #define GPIOA_AFRH_REG (*(volatile uint32_t *)0x48000024UL)
 #define GPIOB_MODER_REG (*(volatile uint32_t *)0x48000400UL)
 #define GPIOB_BSRR_REG (*(volatile uint32_t *)0x48000418UL)
-#define USART1_SR_REG (*(volatile uint32_t *)0x40013800UL)
-#define USART1_DR_REG (*(volatile uint32_t *)0x40013804UL)
-#define USART1_BRR_REG (*(volatile uint32_t *)0x40013808UL)
-#define USART1_CR1_REG (*(volatile uint32_t *)0x4001380CUL)
+/* STM32F051 USART layout: status, receive data and transmit data are
+ * separate registers. Older STM32 SR/DR offsets do not apply here. */
+#define USART1_CR1_REG (*(volatile uint32_t *)0x40013800UL)
+#define USART1_BRR_REG (*(volatile uint32_t *)0x4001380CUL)
+#define USART1_ISR_REG (*(volatile uint32_t *)0x4001381CUL)
+#define USART1_ICR_REG (*(volatile uint32_t *)0x40013820UL)
+#define USART1_RDR_REG (*(volatile uint32_t *)0x40013824UL)
+#define USART1_TDR_REG (*(volatile uint32_t *)0x40013828UL)
 #define SYSTICK_CTRL_REG (*(volatile uint32_t *)0xE000E010UL)
 #define SYSTICK_LOAD_REG (*(volatile uint32_t *)0xE000E014UL)
 #define SYSTICK_VAL_REG (*(volatile uint32_t *)0xE000E018UL)
@@ -21,9 +25,9 @@
 #define RCC_AHBENR_GPIOBEN (1UL << 18)
 #define RCC_APB2ENR_USART1EN (1UL << 14)
 
-#define USART_SR_RXNE (1UL << 5)
-#define USART_SR_TXE (1UL << 7)
-#define USART_SR_ERROR_MASK 0x0FUL
+#define USART_ISR_RXNE (1UL << 5)
+#define USART_ISR_TXE (1UL << 7)
+#define USART_ISR_ERROR_MASK 0x0FUL
 #define USART_CR1_RE (1UL << 2)
 #define USART_CR1_TE (1UL << 3)
 #define USART_CR1_UE (1UL << 0)

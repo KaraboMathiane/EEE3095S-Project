@@ -48,18 +48,18 @@ static void uart_write_text(const char *text)
 {
     while (*text != '\0')
     {
-        while ((USART1_SR_REG & USART_SR_TXE) == 0U)
+        while ((USART1_ISR_REG & USART_ISR_TXE) == 0U)
         {
         }
 
-        USART1_DR_REG = (uint32_t)(uint8_t)*text;
+        USART1_TDR_REG = (uint32_t)(uint8_t)*text;
         text++;
     }
 
-    while ((USART1_SR_REG & USART_SR_TXE) == 0U)
+    while ((USART1_ISR_REG & USART_ISR_TXE) == 0U)
     {
     }
-    USART1_DR_REG = (uint32_t)'\n';
+    USART1_TDR_REG = (uint32_t)'\n';
 }
 
 static void uart_append_line_char(
@@ -100,16 +100,25 @@ static uart_line_status_t uart_read_line(char *line)
 
     for (;;)
     {
-        const uint32_t status = USART1_SR_REG;
+        const uint32_t status = USART1_ISR_REG;
 
-        if ((status & USART_SR_RXNE) != 0U)
+        if ((status & USART_ISR_ERROR_MASK) != 0U)
         {
-            const char character = (char)(USART1_DR_REG & 0xFFUL);
-
-            if ((status & USART_SR_ERROR_MASK) != 0U)
+            /* F0 errors are cleared by writing one to their ICR bits.
+             * Reject this frame, including an overrun without a pending byte. */
+            USART1_ICR_REG = status & USART_ISR_ERROR_MASK;
+            too_long = 1U;
+            if (started == 0U)
             {
-                too_long = 1U;
+                started = 1U;
+                SYSTICK_VAL_REG = 0U;
             }
+        }
+
+        if ((status & USART_ISR_RXNE) != 0U)
+        {
+            const char character = (char)(USART1_RDR_REG & 0xFFUL);
+
             started = 1U;
             elapsed_ms = 0U;
             SYSTICK_VAL_REG = 0U;
