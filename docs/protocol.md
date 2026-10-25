@@ -130,6 +130,13 @@ firmware, and tests.
 
 ## On-board hardware behaviour
 
+The eight PB0--PB7 LEDs additionally display the number of occupied cells as
+a cumulative bar, saturating at eight. New game/disconnect clears the bar;
+terminal games retain it. Rejected requests do not advance it, while an AI
+exchange can advance it by two. The local indicator-toggle button controls
+both this bar and the red/green status indicators, without affecting the LCD,
+game state or serial protocol.
+
 The on-board user button and status LEDs operate locally and do not change the
 serial protocol or game state. The firmware assumes an active-low user button
 on PA0 with an internal pull-up, and active-low red and green LEDs on PB10 and

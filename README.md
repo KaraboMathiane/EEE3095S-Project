@@ -50,6 +50,14 @@ the actual board before use.
 
 ### On-board LCD
 
+The eight individual LEDs (PB0--PB7) show move progress: zero occupied cells
+means all off, then each accepted mark adds one lit LED starting at PB0.
+Eight and nine marks both display all eight LEDs. Rejected moves leave the
+bar unchanged; AI exchanges normally add two marks. The bar stays visible at
+game over and clears for a new game or disconnect. The debounced button now
+toggles both the progress bar and the existing turn/game-over status LEDs;
+the LCD stays active. Verify the physical LED ordering after flashing.
+
 The fitted 16x2 LCD shows a boot/waiting screen, connection status, and the
 authoritative board as `X--/-O-/---` followed by `AI` or `2P`. The second row
 shows the turn, winner, draw or resignation. Updates occur only when the
