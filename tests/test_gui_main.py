@@ -18,11 +18,12 @@ def app():
     instance.events = queue.Queue()
     instance.connected = instance.playing = instance.busy = instance.closing = False
     instance.board = "---------"
+    instance.ai_mode = False
     instance.status = Mock()
     instance.port = MagicMock()
     instance.port.get.return_value = "COM5"
     instance.cells = [Mock() for _ in range(9)]
-    for name in ("connect_button", "refresh_button", "new_button",
+    for name in ("connect_button", "refresh_button", "new_button", "ai_button",
                  "resign_button", "disconnect_button", "log"):
         setattr(instance, name, Mock())
     return instance
@@ -68,6 +69,7 @@ def test_send_forwards_command_to_scheduler(app):
 @pytest.mark.parametrize("command,reply,board", [
     ("CONNECT", "OK", None),
     ("NEW", "OK:BOARD:---------", "---------"),
+    ("NEW:AI", "OK:BOARD:---------", "---------"),
     ("MOVE:4", "OK:BOARD:----X----", "----X----"),
     ("RESIGN", "OK:GAMEOVER", None),
     ("DISCONNECT", "OK", None),
@@ -167,6 +169,19 @@ def test_game_end_disables_moves(app, reply, message):
     app.apply_reply("MOVE:2", reply, None)
     assert not app.playing
     assert app.status.set.call_args.args[0].startswith(message)
+
+
+def test_ai_mode_starts_and_switches_back(app):
+    # Only a successful AI new-game reply enables the AI status display.
+    app.apply_reply("NEW:AI", "NACK:NOGAME", None)
+    assert not app.ai_mode
+    app.apply_reply("NEW:AI", "OK:BOARD:---------", "---------")
+    assert app.ai_mode and app.playing
+    app.status.set.assert_called_with("Your turn (X). STM32 plays O.")
+    app.apply_reply("MOVE:0", "OK:BOARD:X---O----", "X---O----")
+    assert app.board == "X---O----"
+    app.apply_reply("NEW", "OK:BOARD:---------", "---------")
+    assert not app.ai_mode
 
 
 def test_connection_requires_new_game_and_disconnect_clears_flags(app):
