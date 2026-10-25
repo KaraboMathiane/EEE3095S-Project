@@ -1,4 +1,5 @@
 #include "server_protocol.h"
+#include "game_ai.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -96,10 +97,23 @@ static int handle_move(
         return response_append(response, capacity, &response_length, "NACK:RANGE");
     }
 
+    if ((game->ai_enabled != 0U) && (game->result == GAME_RESULT_PLAYING) &&
+        (game->current_player != 'X'))
+    {
+        return response_append(response, capacity, &response_length, "NACK:NOTURN");
+    }
+
     status = game_play(game, index);
     if (status != GAME_MOVE_OK)
     {
         return response_append(response, capacity, &response_length, move_error(status));
+    }
+
+    /* One request completes the human move and, if still playing, O's reply.
+     * Search uses copies; the chosen move goes through the same validator. */
+    if ((game->ai_enabled != 0U) && (game->result == GAME_RESULT_PLAYING))
+    {
+        (void)game_play(game, game_ai_choose_move(game));
     }
 
     if (game->result == GAME_RESULT_X_WON)
@@ -156,7 +170,7 @@ int server_handle_command(
         game_disconnect(game);
         return response_append(response, response_capacity, &response_length, "OK");
     }
-    if (strcmp(command, "NEW") == 0)
+    if ((strcmp(command, "NEW") == 0) || (strcmp(command, "NEW:AI") == 0))
     {
         status = game_new(game);
         if (status != GAME_MOVE_OK)
@@ -164,6 +178,7 @@ int server_handle_command(
             return response_append(response, response_capacity, &response_length,
                                    move_error(status));
         }
+        game->ai_enabled = (strcmp(command, "NEW:AI") == 0) ? 1U : 0U;
         return response_append_board(response, response_capacity, &response_length,
                                      game, "OK:BOARD:");
     }
