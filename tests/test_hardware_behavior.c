@@ -178,8 +178,42 @@ static void test_progress_rejection_ai_and_button(void)
     assert(hardware_progress_leds(&behavior, &game) == 3U);
 }
 
+static void test_view_button_debounce_and_independence(void)
+{
+    hardware_behavior_t behavior;
+    hardware_behavior_init(&behavior);
+    assert(behavior.summary_view == 0U);
+    assert(hardware_view_button_tick(NULL, 1U) == 0U);
+
+    /* Short bouncing presses do not change the default board view. */
+    for (unsigned i = 0U; i < 29U; i++)
+        assert(hardware_view_button_tick(&behavior, 1U) == 0U);
+    assert(hardware_view_button_tick(&behavior, 0U) == 0U);
+    assert(behavior.summary_view == 0U);
+
+    for (unsigned i = 0U; i < 29U; i++)
+        assert(hardware_view_button_tick(&behavior, 1U) == 0U);
+    assert(hardware_view_button_tick(&behavior, 1U) == 1U);
+    assert(behavior.summary_view == 1U && behavior.indicators_enabled == 1U);
+
+    /* Holding cannot repeat, and a bouncing release cannot re-arm the button. */
+    for (unsigned i = 0U; i < 100U; i++)
+        assert(hardware_view_button_tick(&behavior, 1U) == 0U);
+    for (unsigned i = 0U; i < 29U; i++)
+        assert(hardware_view_button_tick(&behavior, 0U) == 0U);
+    assert(hardware_view_button_tick(&behavior, 1U) == 0U);
+    assert(behavior.summary_view == 1U);
+    for (unsigned i = 0U; i < 30U; i++)
+        assert(hardware_view_button_tick(&behavior, 0U) == 0U);
+    for (unsigned i = 0U; i < 29U; i++)
+        assert(hardware_view_button_tick(&behavior, 1U) == 0U);
+    assert(hardware_view_button_tick(&behavior, 1U) == 1U);
+    assert(behavior.summary_view == 0U && behavior.indicators_enabled == 1U);
+}
+
 int main(void)
 {
+    test_view_button_debounce_and_independence();
     test_progress_counts_cells_and_saturates();
     test_progress_rejection_ai_and_button();
     test_turn_leds_follow_server_turn();
