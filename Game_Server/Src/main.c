@@ -1,10 +1,35 @@
 #include "board_config.h"
 #include "hardware_behavior.h"
+#include "lcd.h"
 #include "server_protocol.h"
+#include "uart_rx_queue.h"
 
 #include <stdint.h>
 
 #define UART_LINE_BUFFER_SIZE (SERVER_MAX_COMMAND_LENGTH + 1U)
+
+static uart_rx_queue_t rx_queue;
+static uint32_t observed_rx_drops;
+
+void USART1_IRQHandler(void)
+{
+    const uint32_t status = USART1_ISR_REG;
+    uint16_t entry = 0U;
+
+    if ((status & USART_ISR_RXNE) != 0U)
+    {
+        entry = (uint16_t)(USART1_RDR_REG & 0xFFU);
+    }
+    if ((status & USART_ISR_ERROR_MASK) != 0U)
+    {
+        USART1_ICR_REG = status & USART_ISR_ERROR_MASK;
+        entry |= UART_RX_BAD_BYTE;
+    }
+    if ((status & (USART_ISR_RXNE | USART_ISR_ERROR_MASK)) != 0U)
+    {
+        uart_rx_queue_push(&rx_queue, entry);
+    }
+}
 
 typedef enum
 {
@@ -38,7 +63,10 @@ static void uart_init(void)
 
     USART1_CR1_REG = 0U;
     USART1_BRR_REG = (HSI_CLOCK_HZ + (UART_BAUD_RATE / 2UL)) / UART_BAUD_RATE;
-    USART1_CR1_REG = USART_CR1_RE | USART_CR1_TE | USART_CR1_UE;
+    uart_rx_queue_init(&rx_queue);
+    observed_rx_drops = 0U;
+    NVIC_ISER_REG = NVIC_USART1_ENABLE;
+    USART1_CR1_REG = USART_CR1_RE | USART_CR1_TE | USART_CR1_UE | USART_CR1_RXNEIE;
 
     SYSTICK_LOAD_REG = (HSI_CLOCK_HZ / 1000UL) - 1UL;
     SYSTICK_VAL_REG = 0U;
@@ -69,19 +97,24 @@ static void board_io_init(void)
     uint32_t pupdr = GPIOA_PUPDR_REG;
 
     moder &= ~(3UL << (2UL * USER_BUTTON_PIN));
+    moder &= ~(3UL << (2UL * VIEW_BUTTON_PIN));
     GPIOA_MODER_REG = moder;
 
     pupdr &= ~(3UL << (2UL * USER_BUTTON_PIN));
     pupdr |= 1UL << (2UL * USER_BUTTON_PIN);
+    pupdr &= ~(3UL << (2UL * VIEW_BUTTON_PIN));
+    pupdr |= 1UL << (2UL * VIEW_BUTTON_PIN);
     GPIOA_PUPDR_REG = pupdr;
 
     GPIOB_BSRR_REG = STATUS_LED_MASK | (LED_BYTE_MASK << 16U);
 }
 
-static void board_write_leds(uint8_t leds)
+static void board_write_leds(uint8_t leds, uint8_t progress)
 {
-    uint32_t set_mask = STATUS_LED_MASK;
-    uint32_t reset_mask = 0U;
+    /* The eight individual LEDs are active-high. Preserve the existing
+     * status-LED polarity and touch no LCD pins (PB8/PB9). */
+    uint32_t set_mask = STATUS_LED_MASK | (uint32_t)progress;
+    uint32_t reset_mask = LED_BYTE_MASK & ~(uint32_t)progress;
 
     if ((leds & HARDWARE_LED_X) != 0U)
     {
@@ -138,13 +171,11 @@ static uart_line_status_t uart_read_line(
 
     for (;;)
     {
-        const uint32_t status = USART1_ISR_REG;
+        uint16_t entry;
 
-        if ((status & USART_ISR_ERROR_MASK) != 0U)
+        if (observed_rx_drops != rx_queue.dropped)
         {
-            /* F0 errors are cleared by writing one to their ICR bits.
-             * Reject this frame, including an overrun without a pending byte. */
-            USART1_ICR_REG = status & USART_ISR_ERROR_MASK;
+            observed_rx_drops = rx_queue.dropped;
             too_long = 1U;
             if (started == 0U)
             {
@@ -153,9 +184,10 @@ static uart_line_status_t uart_read_line(
             }
         }
 
-        if ((status & USART_ISR_RXNE) != 0U)
+        if (uart_rx_queue_pop(&rx_queue, &entry))
         {
-            const char character = (char)(USART1_RDR_REG & 0xFFUL);
+            const char character = (char)(entry & 0xFFU);
+            if ((entry & UART_RX_BAD_BYTE) != 0U) too_long = 1U;
 
             started = 1U;
             elapsed_ms = 0U;
@@ -189,7 +221,14 @@ static uart_line_status_t uart_read_line(
             const uint8_t leds =
                 hardware_behavior_tick(behavior, game, button_pressed);
 
-            board_write_leds(leds);
+            board_write_leds(leds, hardware_progress_leds(behavior, game));
+
+            /* View changes are local presentation only; the GUI need not sync. */
+            if (hardware_view_button_tick(
+                    behavior, (GPIOA_IDR_REG & VIEW_BUTTON_MASK) == 0U))
+            {
+                lcd_show_game(game, behavior->summary_view);
+            }
 
             if (started != 0U)
             {
@@ -230,6 +269,8 @@ int main(void)
     board_io_init();
     game_init(&game);
     hardware_behavior_init(&behavior);
+    lcd_init();
+    lcd_show_game(&game, behavior.summary_view);
 
     for (;;)
     {
@@ -240,6 +281,9 @@ int main(void)
 
         if (server_handle_command(&game, line, response, sizeof(response)) != 0)
         {
+            /* Finish display writes before replying, so a request/response
+             * client cannot send its next command during the LCD update. */
+            lcd_show_game(&game, behavior.summary_view);
             uart_write_text(response);
         }
         else

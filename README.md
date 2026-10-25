@@ -48,6 +48,46 @@ the actual board before use.
 
 ## PC client and tests
 
+### On-board LCD
+
+USART1 now receives through an interrupt-driven 128-entry ring (127 usable
+entries), allowing LCD/button/LED work while bytes arrive. The ISR stores
+bytes and receive-error markers; main performs framing and game processing.
+Overflow is recorded and the affected frame is rejected. Include
+`uart_rx_queue.c` when rebuilding. Physical UART regression must be rerun
+after flashing; host queue tests alone cannot verify interrupt timing.
+
+SW1 on PA1 switches between the default board screen and a summary screen
+showing mode, occupied-cell count and turn (or final result). Press/release
+must each be stable for 30 serviced milliseconds; holding does not repeat.
+The selected view persists across new games until toggled or the MCU resets.
+Both views use the normal waiting/connected screen before a game starts.
+SW0 on PA0 continues to toggle LEDs independently. Neither switch changes
+the game state. Verify SW1 visually after flashing and rerun UART tests.
+
+The eight individual LEDs (PB0--PB7) show move progress: zero occupied cells
+means all off, then each accepted mark adds one lit LED starting at PB0.
+Eight and nine marks both display all eight LEDs. Rejected moves leave the
+bar unchanged; AI exchanges normally add two marks. The bar stays visible at
+game over and clears for a new game or disconnect. The debounced button now
+toggles both the progress bar and the existing turn/game-over status LEDs;
+the LCD stays active. Verify the physical LED ordering after flashing.
+
+The fitted 16x2 LCD shows a boot/waiting screen, connection status, and the
+authoritative board as `X--/-O-/---` followed by `AI` or `2P`. The second row
+shows the turn, winner, draw or resignation. Updates occur only when the
+displayed text changes, before the UART response is sent. The existing LED
+toggle button does not disable the LCD.
+
+The UCT schematic maps RS/E to PC14/PC15, D4/D5 to PB8/PB9, D6/D7 to
+PA12/PA15 and backlight control to PC13. The driver uses the board's existing
+8 MHz clock and SysTick; changing that timing requires reviewing the driver.
+The LCD power and logic jumpers must match the fitted module. Do not change
+powered jumpers. Adjust the contrast potentiometer if text is faint or bars
+hide the characters. Rebuild/flash with `lcd.c` and `lcd_format.c` included.
+Host tests check text formatting; pin mapping, LCD timing and visible output
+require board verification and rerunning the serial regression suite.
+
 ### STM32 AI opponent
 
 After connecting, choose **Play against STM32 (you are X)** for an AI game.

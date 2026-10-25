@@ -20,7 +20,34 @@ void hardware_behavior_init(hardware_behavior_t *behavior)
     behavior->debounce_samples = 0U;
     behavior->indicators_enabled = 1U;
     behavior->blink_on = 1U;
+    behavior->view_stable_pressed = 0U;
+    behavior->view_debounce_ms = 0U;
+    behavior->summary_view = 0U;
     behavior->previous_result = GAME_RESULT_NOT_STARTED;
+}
+
+uint8_t hardware_view_button_tick(hardware_behavior_t *behavior, uint8_t pressed)
+{
+    if (behavior == NULL) return 0U;
+    pressed = pressed != 0U ? 1U : 0U;
+
+    /* A transition must persist for 30 samples. A hold triggers once;
+     * release must also debounce before another press can toggle the view. */
+    if (pressed == behavior->view_stable_pressed)
+    {
+        behavior->view_debounce_ms = 0U;
+    }
+    else if (++behavior->view_debounce_ms >= 30U)
+    {
+        behavior->view_stable_pressed = pressed;
+        behavior->view_debounce_ms = 0U;
+        if (pressed != 0U)
+        {
+            behavior->summary_view ^= 1U;
+            return 1U;
+        }
+    }
+    return 0U;
 }
 
 static void update_button(hardware_behavior_t *behavior, uint8_t button_pressed)
@@ -53,6 +80,29 @@ static void update_button(hardware_behavior_t *behavior, uint8_t button_pressed)
                 (behavior->indicators_enabled == 0U) ? 1U : 0U;
         }
     }
+}
+
+uint8_t hardware_progress_leds(
+    const hardware_behavior_t *behavior,
+    const game_state_t *game)
+{
+    uint32_t occupied = 0U;
+
+    if ((behavior == NULL) || (game == NULL) ||
+        (behavior->indicators_enabled == 0U) ||
+        (game->connected == 0U) || (game->started == 0U))
+    {
+        return 0U;
+    }
+
+    /* Derive progress from authoritative cells rather than counting requests:
+     * invalid moves do not advance it; an AI exchange can add two marks. */
+    for (uint32_t i = 0U; i < GAME_BOARD_SIZE; i++)
+    {
+        if ((game->board[i] == 'X') || (game->board[i] == 'O')) occupied++;
+    }
+    if (occupied >= 8U) return 0xFFU;
+    return (uint8_t)((1UL << occupied) - 1UL);
 }
 
 static uint8_t game_leds(
