@@ -35,6 +35,9 @@
 #define USART_ISR_TXE (1UL << 7)
 #define USART_ISR_ERROR_MASK 0x0FUL
 #define USART_CR1_RE (1UL << 2)
+#define USART_CR1_RXNEIE (1UL << 5)
+#define NVIC_ISER_REG (*(volatile uint32_t *)0xE000E100UL)
+#define NVIC_USART1_ENABLE (1UL << 27)
 #define USART_CR1_TE (1UL << 3)
 #define USART_CR1_UE (1UL << 0)
 #define SYSTICK_CTRL_ENABLE (1UL << 0)
@@ -43,6 +46,7 @@
 
 #define LED_BYTE_MASK 0x00FFUL
 #define USER_BUTTON_PIN 0U
+#define VIEW_BUTTON_PIN 1U
 #define LED_RED_PIN 10U
 #define LED_GREEN_PIN 11U
 #define UART_TX_PIN 9U
@@ -54,5 +58,6 @@
 #define STATUS_LED_MASK \
     ((1UL << LED_RED_PIN) | (1UL << LED_GREEN_PIN))
 #define USER_BUTTON_MASK (1UL << USER_BUTTON_PIN)
+#define VIEW_BUTTON_MASK (1UL << VIEW_BUTTON_PIN)
 
 #endif

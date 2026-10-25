@@ -20,7 +20,34 @@ void hardware_behavior_init(hardware_behavior_t *behavior)
     behavior->debounce_samples = 0U;
     behavior->indicators_enabled = 1U;
     behavior->blink_on = 1U;
+    behavior->view_stable_pressed = 0U;
+    behavior->view_debounce_ms = 0U;
+    behavior->summary_view = 0U;
     behavior->previous_result = GAME_RESULT_NOT_STARTED;
+}
+
+uint8_t hardware_view_button_tick(hardware_behavior_t *behavior, uint8_t pressed)
+{
+    if (behavior == NULL) return 0U;
+    pressed = pressed != 0U ? 1U : 0U;
+
+    /* A transition must persist for 30 samples. A hold triggers once;
+     * release must also debounce before another press can toggle the view. */
+    if (pressed == behavior->view_stable_pressed)
+    {
+        behavior->view_debounce_ms = 0U;
+    }
+    else if (++behavior->view_debounce_ms >= 30U)
+    {
+        behavior->view_stable_pressed = pressed;
+        behavior->view_debounce_ms = 0U;
+        if (pressed != 0U)
+        {
+            behavior->summary_view ^= 1U;
+            return 1U;
+        }
+    }
+    return 0U;
 }
 
 static void update_button(hardware_behavior_t *behavior, uint8_t button_pressed)

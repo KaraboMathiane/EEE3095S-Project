@@ -85,10 +85,11 @@ void lcd_init(void)
     display_valid = 0U;
 }
 
-void lcd_show_game(const game_state_t *game)
+void lcd_show_game(const game_state_t *game, uint8_t summary_view)
 {
     char rows[2][17];
-    lcd_format_game(game, rows);
+    if (summary_view) lcd_format_summary(game, rows);
+    else lcd_format_game(game, rows);
     if (display_valid && memcmp(rows, displayed, sizeof(rows)) == 0) return;
 
     for (uint8_t row = 0U; row < 2U; row++)

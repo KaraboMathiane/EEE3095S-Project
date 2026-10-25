@@ -3,6 +3,43 @@
 #include <stddef.h>
 #include <string.h>
 
+void lcd_format_summary(const game_state_t *game, char rows[2][17])
+{
+    uint8_t moves = 0U;
+    lcd_format_game(game, rows);
+    /* Keep the existing boot/connected screens until a game exists. */
+    if ((game == NULL) || !game->connected || !game->started) return;
+
+    for (uint8_t i = 0U; i < GAME_BOARD_SIZE; i++)
+        if (game->board[i] == 'X' || game->board[i] == 'O') moves++;
+
+    memset(rows[0], ' ', 16U);
+    memset(rows[1], ' ', 16U);
+    if (game->result == GAME_RESULT_PLAYING)
+    {
+        const char *mode = game->ai_enabled ? "Mode: STM32 AI" : "Mode: 2 players";
+        memcpy(rows[0], mode, strlen(mode));
+        memcpy(rows[1], "Moves: 0 Turn: X", 16U);
+        rows[1][7] = (char)('0' + moves);
+        rows[1][15] = game->current_player;
+    }
+    else
+    {
+        const char *result = "Result: Ended";
+        switch (game->result)
+        {
+            case GAME_RESULT_X_WON: result = "Result: X wins"; break;
+            case GAME_RESULT_O_WON: result = "Result: O wins"; break;
+            case GAME_RESULT_DRAW: result = "Result: Draw"; break;
+            case GAME_RESULT_RESIGNED: result = "Result: Resigned"; break;
+            default: break;
+        }
+        memcpy(rows[0], result, strlen(result));
+        memcpy(rows[1], "Moves played: 0", 15U);
+        rows[1][14] = (char)('0' + moves);
+    }
+}
+
 void lcd_format_game(const game_state_t *game, char rows[2][17])
 {
     const char *status = "Select new game";
