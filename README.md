@@ -50,6 +50,21 @@ the actual board before use.
 
 ### On-board LCD
 
+USART1 now receives through an interrupt-driven 128-entry ring (127 usable
+entries), allowing LCD/button/LED work while bytes arrive. The ISR stores
+bytes and receive-error markers; main performs framing and game processing.
+Overflow is recorded and the affected frame is rejected. Include
+`uart_rx_queue.c` when rebuilding. Physical UART regression must be rerun
+after flashing; host queue tests alone cannot verify interrupt timing.
+
+SW1 on PA1 switches between the default board screen and a summary screen
+showing mode, occupied-cell count and turn (or final result). Press/release
+must each be stable for 30 serviced milliseconds; holding does not repeat.
+The selected view persists across new games until toggled or the MCU resets.
+Both views use the normal waiting/connected screen before a game starts.
+SW0 on PA0 continues to toggle LEDs independently. Neither switch changes
+the game state. Verify SW1 visually after flashing and rerun UART tests.
+
 The eight individual LEDs (PB0--PB7) show move progress: zero occupied cells
 means all off, then each accepted mark adds one lit LED starting at PB0.
 Eight and nine marks both display all eight LEDs. Rejected moves leave the
