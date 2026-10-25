@@ -48,6 +48,23 @@ the actual board before use.
 
 ## PC client and tests
 
+### On-board LCD
+
+The fitted 16x2 LCD shows a boot/waiting screen, connection status, and the
+authoritative board as `X--/-O-/---` followed by `AI` or `2P`. The second row
+shows the turn, winner, draw or resignation. Updates occur only when the
+displayed text changes, before the UART response is sent. The existing LED
+toggle button does not disable the LCD.
+
+The UCT schematic maps RS/E to PC14/PC15, D4/D5 to PB8/PB9, D6/D7 to
+PA12/PA15 and backlight control to PC13. The driver uses the board's existing
+8 MHz clock and SysTick; changing that timing requires reviewing the driver.
+The LCD power and logic jumpers must match the fitted module. Do not change
+powered jumpers. Adjust the contrast potentiometer if text is faint or bars
+hide the characters. Rebuild/flash with `lcd.c` and `lcd_format.c` included.
+Host tests check text formatting; pin mapping, LCD timing and visible output
+require board verification and rerunning the serial regression suite.
+
 ### STM32 AI opponent
 
 After connecting, choose **Play against STM32 (you are X)** for an AI game.
