@@ -53,6 +53,26 @@ first. For example, `X-O--O---` represents X in cells 0 and 2 and O in cells
 
 ## Commands and replies
 
+### Optional STM32 AI mode
+
+`NEW:AI` starts a fresh game with the human as X and the STM32 as O, replying
+`OK:BOARD:---------`. `NEW` always starts standard two-player mode. Both require
+an established session. No additional dependency or PC-side AI is used.
+
+In AI mode, `MOVE:<index>` submits X's move. If play continues, the STM32
+selects O's move using deterministic minimax with alpha-beta pruning and
+applies it through the same game validator. One reply returns the board after
+both moves, or the terminal WIN/DRAW token. The client fetches STATE after a
+terminal token as before. No second client MOVE is needed for O. Rejected
+human requests trigger no AI move. A client request during an O turn is
+rejected with `NACK:NOTURN`; normal synchronous exchanges finish on X's turn.
+
+The search prefers quicker wins and postpones losses, breaking equal scores
+by centre, corners, then edges. Search modifies state copies only and uses no
+heap allocation. RESIGN, STATE and DISCONNECT retain their existing meanings;
+disconnect clears AI mode. Button/LED behaviour is unchanged. O's indicator
+may be too brief to see because its computation is synchronous.
+
 Each command is one line. Command names and reply tokens are case-sensitive.
 
 | GUI to STM32 | STM32 to GUI | Meaning |

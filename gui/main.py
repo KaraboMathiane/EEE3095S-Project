@@ -47,6 +47,7 @@ class App:
 
         # Initial blank placeholder. Subsequent boards come from server replies.
         self.board = "---------"
+        self.ai_mode = False
 
         # Window and heading
         root.title("STM32 · Tic-Tac-Toe")
@@ -112,6 +113,12 @@ class App:
         # Game actions
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=14)
+        self.ai_button = ttk.Button(
+            frame, text="Play against STM32 (you are X)",
+            command=lambda: self.send("NEW:AI"),
+        )
+        self.ai_button.pack(fill="x", pady=(0, 8))
+
         self.new_button = ttk.Button(
             actions, text="New game", command=lambda: self.send("NEW")
         )
@@ -163,6 +170,7 @@ class App:
         )
 
         self.new_button.configure(state="normal" if available else "disabled")
+        self.ai_button.configure(state="normal" if available else "disabled")
         self.disconnect_button.configure(state="normal" if available else "disabled")
         self.resign_button.configure(state="normal" if available and self.playing else "disabled")
 
@@ -241,7 +249,7 @@ class App:
                 reply.startswith("NACK:")
                 or (command in ("CONNECT", "DISCONNECT") and reply == "OK")
                 or (
-                    command == "NEW"
+                    command in ("NEW", "NEW:AI")
                     and reply.startswith("OK:BOARD:")
                     and board is not None
                 )
@@ -325,6 +333,9 @@ class App:
         if board is not None:
             self.board = board
 
+        if command in ("NEW", "NEW:AI") and reply.startswith("OK:BOARD:"):
+            self.ai_mode = command == "NEW:AI"
+
         if command == "DISCONNECT":
             self.connected = self.playing = False
 
@@ -360,6 +371,8 @@ class App:
             # Display hint derived from confirmed state; legality remains on the server.
             turn = "X" if self.board.count("X") == self.board.count("O") else "O"
             self.status.set(f"{turn} to move.")
+            if self.ai_mode:
+                self.status.set("Your turn (X). STM32 plays O.")
 
     # Window shutdown
 

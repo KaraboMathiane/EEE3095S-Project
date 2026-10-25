@@ -54,6 +54,7 @@ void game_init(game_state_t *game)
     game->current_player = 'X';
     game->connected = 0U;
     game->started = 0U;
+    game->ai_enabled = 0U;
     game->result = GAME_RESULT_NOT_STARTED;
 }
 
@@ -87,6 +88,7 @@ game_move_status_t game_new(game_state_t *game)
     game->board[GAME_BOARD_SIZE] = '\0';
     game->current_player = 'X';
     game->started = 1U;
+    game->ai_enabled = 0U;
     game->result = GAME_RESULT_PLAYING;
     return GAME_MOVE_OK;
 }

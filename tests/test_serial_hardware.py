@@ -72,6 +72,51 @@ def board(uart):
     uart.expect("DISCONNECT", "OK")
 
 
+@pytest.mark.parametrize("opening", range(9))
+def test_ai_game_on_board(board, opening):
+    # Try each opening, then first-empty moves. Verify mark preservation,
+    # legal AI responses, terminal results and switching back to two humans.
+    board.expect("NEW:AI", "OK:BOARD:---------")
+    previous = "---------"
+    move = opening
+    lines = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
+    for _ in range(5):
+        board.write(f"MOVE:{move}\n".encode("ascii"))
+        reply = board.read()
+        assert reply in ("WIN:O", "DRAW") or reply.startswith("OK:BOARD:")
+        board.write(b"STATE\n")
+        state = board.read()
+        assert state.startswith("BOARD:")
+        cells = state[6:]
+        assert len(cells) == 9 and all(c in "XO-" for c in cells)
+        assert cells[move] == "X"
+        added_o = 0
+        for i, old in enumerate(previous):
+            if old != "-":
+                assert cells[i] == old
+            elif i != move:
+                assert cells[i] in "-O"
+                added_o += cells[i] == "O"
+        assert added_o <= 1
+        assert not any(all(cells[i] == "X" for i in line) for line in lines)
+        if reply in ("WIN:O", "DRAW"):
+            if reply == "WIN:O":
+                assert any(all(cells[i] == "O" for i in line) for line in lines)
+            else:
+                assert "-" not in cells
+                assert not any(all(cells[i] == "O" for i in line) for line in lines)
+            board.expect("MOVE:0", "NACK:ILLEGAL")
+            board.expect("STATE", state)
+            break
+        assert reply == "OK:BOARD:" + cells and added_o == 1
+        previous = cells
+        move = cells.index("-")
+    else:
+        pytest.fail("AI game did not terminate within five human moves")
+    board.expect("NEW", "OK:BOARD:---------")
+    board.expect("MOVE:0", "OK:BOARD:X--------")
+
+
 def test_connect_new_and_state(board):
     # The fixture checks handshake/new-game replies; STATE confirms the empty board.
     board.expect("STATE", "BOARD:---------")

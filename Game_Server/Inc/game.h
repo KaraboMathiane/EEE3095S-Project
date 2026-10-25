@@ -30,6 +30,7 @@ typedef struct
     char current_player;
     uint8_t connected;
     uint8_t started;
+    uint8_t ai_enabled;
     game_result_t result;
 } game_state_t;
 
