@@ -1,5 +1,6 @@
 #include "board_config.h"
 #include "hardware_behavior.h"
+#include "lcd.h"
 #include "server_protocol.h"
 
 #include <stdint.h>
@@ -230,6 +231,8 @@ int main(void)
     board_io_init();
     game_init(&game);
     hardware_behavior_init(&behavior);
+    lcd_init();
+    lcd_show_game(&game);
 
     for (;;)
     {
@@ -240,6 +243,9 @@ int main(void)
 
         if (server_handle_command(&game, line, response, sizeof(response)) != 0)
         {
+            /* Finish display writes before replying, so a request/response
+             * client cannot send its next command during the LCD update. */
+            lcd_show_game(&game);
             uart_write_text(response);
         }
         else

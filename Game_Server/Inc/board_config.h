@@ -8,9 +8,12 @@
 #define GPIOA_MODER_REG (*(volatile uint32_t *)0x48000000UL)
 #define GPIOA_PUPDR_REG (*(volatile uint32_t *)0x4800000CUL)
 #define GPIOA_IDR_REG (*(volatile uint32_t *)0x48000010UL)
+#define GPIOA_BSRR_REG (*(volatile uint32_t *)0x48000018UL)
 #define GPIOA_AFRH_REG (*(volatile uint32_t *)0x48000024UL)
 #define GPIOB_MODER_REG (*(volatile uint32_t *)0x48000400UL)
 #define GPIOB_BSRR_REG (*(volatile uint32_t *)0x48000418UL)
+#define GPIOC_MODER_REG (*(volatile uint32_t *)0x48000800UL)
+#define GPIOC_BSRR_REG (*(volatile uint32_t *)0x48000818UL)
 /* STM32F051 USART layout: status, receive data and transmit data are
  * separate registers. Older STM32 SR/DR offsets do not apply here. */
 #define USART1_CR1_REG (*(volatile uint32_t *)0x40013800UL)
@@ -25,6 +28,7 @@
 
 #define RCC_AHBENR_GPIOAEN (1UL << 17)
 #define RCC_AHBENR_GPIOBEN (1UL << 18)
+#define RCC_AHBENR_GPIOCEN (1UL << 19)
 #define RCC_APB2ENR_USART1EN (1UL << 14)
 
 #define USART_ISR_RXNE (1UL << 5)
