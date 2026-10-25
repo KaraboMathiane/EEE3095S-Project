@@ -22,6 +22,12 @@ typedef struct
 } hardware_behavior_t;
 
 void hardware_behavior_init(hardware_behavior_t *behavior);
+/* PB0..PB7 progress bar: one bit per occupied cell, saturating at eight.
+ * Kept separate from the two status bits returned by tick(). */
+uint8_t hardware_progress_leds(
+    const hardware_behavior_t *behavior,
+    const game_state_t *game);
+
 uint8_t hardware_behavior_tick(
     hardware_behavior_t *behavior,
     const game_state_t *game,

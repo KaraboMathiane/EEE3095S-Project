@@ -55,6 +55,29 @@ static void update_button(hardware_behavior_t *behavior, uint8_t button_pressed)
     }
 }
 
+uint8_t hardware_progress_leds(
+    const hardware_behavior_t *behavior,
+    const game_state_t *game)
+{
+    uint32_t occupied = 0U;
+
+    if ((behavior == NULL) || (game == NULL) ||
+        (behavior->indicators_enabled == 0U) ||
+        (game->connected == 0U) || (game->started == 0U))
+    {
+        return 0U;
+    }
+
+    /* Derive progress from authoritative cells rather than counting requests:
+     * invalid moves do not advance it; an AI exchange can add two marks. */
+    for (uint32_t i = 0U; i < GAME_BOARD_SIZE; i++)
+    {
+        if ((game->board[i] == 'X') || (game->board[i] == 'O')) occupied++;
+    }
+    if (occupied >= 8U) return 0xFFU;
+    return (uint8_t)((1UL << occupied) - 1UL);
+}
+
 static uint8_t game_leds(
     hardware_behavior_t *behavior,
     const game_state_t *game)

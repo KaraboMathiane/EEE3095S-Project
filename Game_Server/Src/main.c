@@ -79,10 +79,12 @@ static void board_io_init(void)
     GPIOB_BSRR_REG = STATUS_LED_MASK | (LED_BYTE_MASK << 16U);
 }
 
-static void board_write_leds(uint8_t leds)
+static void board_write_leds(uint8_t leds, uint8_t progress)
 {
-    uint32_t set_mask = STATUS_LED_MASK;
-    uint32_t reset_mask = 0U;
+    /* The eight individual LEDs are active-high. Preserve the existing
+     * status-LED polarity and touch no LCD pins (PB8/PB9). */
+    uint32_t set_mask = STATUS_LED_MASK | (uint32_t)progress;
+    uint32_t reset_mask = LED_BYTE_MASK & ~(uint32_t)progress;
 
     if ((leds & HARDWARE_LED_X) != 0U)
     {
@@ -190,7 +192,7 @@ static uart_line_status_t uart_read_line(
             const uint8_t leds =
                 hardware_behavior_tick(behavior, game, button_pressed);
 
-            board_write_leds(leds);
+            board_write_leds(leds, hardware_progress_leds(behavior, game));
 
             if (started != 0U)
             {
