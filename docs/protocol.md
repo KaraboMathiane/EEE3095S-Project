@@ -107,3 +107,18 @@ baseline. The maximum frame length, newline terminator, timeout recovery, and
 explicit rejection replies provide the initial framing and parser contract.
 Any protocol changes must be documented here and kept consistent in the GUI,
 firmware, and tests.
+
+## On-board hardware behaviour
+
+The on-board user button and status LEDs operate locally and do not change the
+serial protocol or game state. The firmware assumes an active-low user button
+on PA0 with an internal pull-up, and active-low red and green LEDs on PB10 and
+PB11; verify these assignments and polarities against the actual UCT STM board.
+PB0 through PB7 are configured as outputs and held low because they are not
+used by the game.
+While a game is in progress, the red LED indicates X's turn and the green LED
+indicates O's turn. After a win, draw, or resignation, both LEDs blink. A
+button press stable for 30 ms toggles the status indicators on or off. Game-
+over blinking toggles every 250 ms. The button does not reset or start a game,
+avoiding an unreported board change that would leave the PC display out of
+sync.

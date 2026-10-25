@@ -40,7 +40,11 @@ and the final report remain to be completed.
    debug probe.
 
 Verify that the board exposes USART1 on PA9/PA10 and uses the expected clock
-before wiring. The current firmware retains the initial GPIO LED setup.
+before wiring. The firmware assumes an active-low button on PA0 and active-low
+red/green LEDs on PB10/PB11. During play, the LED identifies the server's
+current turn; both LEDs blink after game over. Pressing the button toggles
+these indicators without changing the game. Confirm pins and polarity against
+the actual board before use.
 
 ## PC client and tests
 
@@ -70,6 +74,16 @@ USART1 as a PC serial port; confirm the wiring described above.
 The current protocol cannot report whether a STATE board is still in play;
 therefore a new GUI connection requires New game. Hardware-button changes
 and unsolicited updates need a jointly agreed protocol extension.
+therefore a new GUI connection requires New game. The on-board button toggles
+the local turn/game-over LED indicators only; it does not modify the game or
+send unsolicited serial messages.
+
+The firmware assumes an active-low user button on PA0 and active-low red and
+green LEDs on PB10 and PB11. Confirm those pin assignments and polarities
+against the actual UCT STM board before relying on the hardware behaviour.
+During play, the LED for the current server turn is on. After a win, draw, or
+resignation, both LEDs blink. A debounced button press toggles these indicators
+on or off.
 
 To run the firmware game/protocol tests on a PC, install GCC and Python:
 
@@ -80,10 +94,12 @@ python -m pip install -r tests/requirements.txt
 python -m pytest -q
 ```
 
-The tests compile the same portable C game and protocol modules with GCC and
-exercise them through a small host-side serial-line harness. They do not
-emulate STM32 registers, UART timing, or physical hardware. The command and
-reply formats are specified in [`docs/protocol.md`](./docs/protocol.md).
+The tests compile the portable C game, protocol, and hardware-behaviour
+modules with GCC. The host-side serial-line harness exercises game/protocol
+commands, while dedicated unit tests exercise button debounce and LED state
+selection. They do not emulate STM32 registers, UART timing, or physical
+hardware. The command and reply formats are specified in
+[`docs/protocol.md`](./docs/protocol.md).
 
 ## Git notes
 
