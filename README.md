@@ -48,6 +48,20 @@ the actual board before use.
 
 ## PC client and tests
 
+### STM32 AI opponent
+
+After connecting, choose **Play against STM32 (you are X)** for an AI game.
+The MCU plays O using minimax; the PC only submits X moves and displays the
+confirmed board. **New game** starts the original two-human mode.
+Rebuild and flash the firmware after updating: `Src/game_ai.c` must be included
+in the CubeIDE build (it is under the existing Src source directory).
+
+The host AI test explores every legal human continuation against the chosen
+deterministic strategy and checks that X never wins and no mark is overwritten.
+Run it with `python -m pytest tests/test_ai.py -v -s`. Physical AI tests try all
+nine opening cells; run the serial suite again after flashing. Existing XML
+results predate the AI extension and do not validate this firmware revision.
+
 To run the GUI, use Python 3.9 or newer with Tkinter installed (included in
 the standard Windows Python installer). From the repository root:
 
