@@ -103,5 +103,24 @@ hardware. The command and reply formats are specified in
 
 ## Git notes
 
+### Physical UART regression tests
+
+Flash the latest firmware and leave it running. Connect both USB cables and
+close the GUI and serial terminal so the UART port is free. These tests replace
+the current game and disconnect when each case finishes.
+
+```powershell
+python -m pip install -r tests/requirements.txt
+python -m pytest tests/test_serial_hardware.py --serial-port COM5 -v --junitxml=hardware-results.xml
+```
+
+Replace COM5 if necessary. The suite checks all eight X winning lines, an O win,
+a draw, rejected moves, resignation, restart, disconnect, CRLF, split input,
+garbage/oversized frames and partial-frame timeout recovery. Without
+`--serial-port`, hardware cases are skipped and no serial device is opened.
+Run sequentially; do not use parallel pytest workers with one board. The XML
+file records results for report evidence. LEDs and button operation still need
+manual physical checks. A missing/busy selected port is a failure, not a skip.
+
 The CubeIDE workspace metadata and generated `Debug` output are ignored.
 Do not commit `.metadata/` or generated build files.
