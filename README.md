@@ -72,6 +72,8 @@ connecting. Flashing through a debug probe does not necessarily expose
 USART1 as a PC serial port; confirm the wiring described above.
 
 The current protocol cannot report whether a STATE board is still in play;
+therefore a new GUI connection requires New game. Hardware-button changes
+and unsolicited updates need a jointly agreed protocol extension.
 therefore a new GUI connection requires New game. The on-board button toggles
 the local turn/game-over LED indicators only; it does not modify the game or
 send unsolicited serial messages.
