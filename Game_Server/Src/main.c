@@ -1,4 +1,5 @@
 #include "board_config.h"
+#include "hardware_behavior.h"
 #include "server_protocol.h"
 
 #include <stdint.h>
@@ -48,18 +49,52 @@ static void uart_write_text(const char *text)
 {
     while (*text != '\0')
     {
-        while ((USART1_SR_REG & USART_SR_TXE) == 0U)
+        while ((USART1_ISR_REG & USART_ISR_TXE) == 0U)
         {
         }
 
-        USART1_DR_REG = (uint32_t)(uint8_t)*text;
+        USART1_TDR_REG = (uint32_t)(uint8_t)*text;
         text++;
     }
 
-    while ((USART1_SR_REG & USART_SR_TXE) == 0U)
+    while ((USART1_ISR_REG & USART_ISR_TXE) == 0U)
     {
     }
-    USART1_DR_REG = (uint32_t)'\n';
+    USART1_TDR_REG = (uint32_t)'\n';
+}
+
+static void board_io_init(void)
+{
+    uint32_t moder = GPIOA_MODER_REG;
+    uint32_t pupdr = GPIOA_PUPDR_REG;
+
+    moder &= ~(3UL << (2UL * USER_BUTTON_PIN));
+    GPIOA_MODER_REG = moder;
+
+    pupdr &= ~(3UL << (2UL * USER_BUTTON_PIN));
+    pupdr |= 1UL << (2UL * USER_BUTTON_PIN);
+    GPIOA_PUPDR_REG = pupdr;
+
+    GPIOB_BSRR_REG = STATUS_LED_MASK | (LED_BYTE_MASK << 16U);
+}
+
+static void board_write_leds(uint8_t leds)
+{
+    uint32_t set_mask = STATUS_LED_MASK;
+    uint32_t reset_mask = 0U;
+
+    if ((leds & HARDWARE_LED_X) != 0U)
+    {
+        set_mask &= ~(1UL << LED_RED_PIN);
+        reset_mask |= 1UL << LED_RED_PIN;
+    }
+    if ((leds & HARDWARE_LED_O) != 0U)
+    {
+        set_mask &= ~(1UL << LED_GREEN_PIN);
+        reset_mask |= 1UL << LED_GREEN_PIN;
+    }
+
+    GPIOB_BSRR_REG = set_mask | (reset_mask << 16U);
 }
 
 static void uart_append_line_char(
@@ -90,7 +125,10 @@ static void uart_append_line_char(
     }
 }
 
-static uart_line_status_t uart_read_line(char *line)
+static uart_line_status_t uart_read_line(
+    char *line,
+    game_state_t *game,
+    hardware_behavior_t *behavior)
 {
     uint32_t length = 0U;
     uint32_t elapsed_ms = 0U;
@@ -100,16 +138,25 @@ static uart_line_status_t uart_read_line(char *line)
 
     for (;;)
     {
-        const uint32_t status = USART1_SR_REG;
+        const uint32_t status = USART1_ISR_REG;
 
-        if ((status & USART_SR_RXNE) != 0U)
+        if ((status & USART_ISR_ERROR_MASK) != 0U)
         {
-            const char character = (char)(USART1_DR_REG & 0xFFUL);
-
-            if ((status & USART_SR_ERROR_MASK) != 0U)
+            /* F0 errors are cleared by writing one to their ICR bits.
+             * Reject this frame, including an overrun without a pending byte. */
+            USART1_ICR_REG = status & USART_ISR_ERROR_MASK;
+            too_long = 1U;
+            if (started == 0U)
             {
-                too_long = 1U;
+                started = 1U;
+                SYSTICK_VAL_REG = 0U;
             }
+        }
+
+        if ((status & USART_ISR_RXNE) != 0U)
+        {
+            const char character = (char)(USART1_RDR_REG & 0xFFUL);
+
             started = 1U;
             elapsed_ms = 0U;
             SYSTICK_VAL_REG = 0U;
@@ -135,14 +182,23 @@ static uart_line_status_t uart_read_line(char *line)
                 uart_append_line_char(line, &length, &too_long, character);
             }
         }
-        else if ((started != 0U) &&
-                 ((SYSTICK_CTRL_REG & SYSTICK_CTRL_COUNTFLAG) != 0U))
+        else if ((SYSTICK_CTRL_REG & SYSTICK_CTRL_COUNTFLAG) != 0U)
         {
-            elapsed_ms++;
-            if (elapsed_ms >= UART_INTERBYTE_TIMEOUT_MS)
+            const uint8_t button_pressed =
+                ((GPIOA_IDR_REG & USER_BUTTON_MASK) == 0U) ? 1U : 0U;
+            const uint8_t leds =
+                hardware_behavior_tick(behavior, game, button_pressed);
+
+            board_write_leds(leds);
+
+            if (started != 0U)
             {
-                line[0] = '\0';
-                return UART_LINE_BAD_FRAME;
+                elapsed_ms++;
+                if (elapsed_ms >= UART_INTERBYTE_TIMEOUT_MS)
+                {
+                    line[0] = '\0';
+                    return UART_LINE_BAD_FRAME;
+                }
             }
         }
     }
@@ -154,6 +210,7 @@ int main(void)
         0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, LED_RED_PIN, LED_GREEN_PIN
     };
     game_state_t game;
+    hardware_behavior_t behavior;
     char line[UART_LINE_BUFFER_SIZE];
     char response[SERVER_RESPONSE_CAPACITY];
     uint32_t moder;
@@ -169,14 +226,14 @@ int main(void)
     }
     GPIOB_MODER_REG = moder;
 
-    GPIOB_BSRR_REG = ALL_LED_MASK;
-
     uart_init();
+    board_io_init();
     game_init(&game);
+    hardware_behavior_init(&behavior);
 
     for (;;)
     {
-        if (uart_read_line(line) != UART_LINE_READY)
+        if (uart_read_line(line, &game, &behavior) != UART_LINE_READY)
         {
             line[0] = '\0';
         }
