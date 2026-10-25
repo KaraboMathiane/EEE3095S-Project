@@ -23,6 +23,7 @@ def server_binary(tmp_path_factory):
         "-I",
         str(ROOT / "Game_Server" / "Inc"),
         str(ROOT / "Game_Server" / "Src" / "game.c"),
+        str(ROOT / "Game_Server" / "Src" / "game_ai.c"),
         str(ROOT / "Game_Server" / "Src" / "server_protocol.c"),
         str(ROOT / "tests" / "host_server.c"),
         "-o",
@@ -43,6 +44,18 @@ def run_server(server_binary, commands):
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.splitlines()
+
+
+def test_ai_mode_replies_and_rejected_moves(server_binary):
+    # AI answers a corner with centre; rejected requests leave that board unchanged.
+    assert run_server(server_binary, [
+        "CONNECT", "NEW:AI", "MOVE:0", "MOVE:4", "MOVE:9", "STATE",
+        "RESIGN", "MOVE:1", "NEW", "MOVE:0",
+    ]) == [
+        "OK", "OK:BOARD:---------", "OK:BOARD:X---O----",
+        "NACK:OCCUPIED", "NACK:RANGE", "BOARD:X---O----",
+        "OK:GAMEOVER", "NACK:ILLEGAL", "OK:BOARD:---------", "OK:BOARD:X--------",
+    ]
 
 
 def test_connect_new_and_state(server_binary):
