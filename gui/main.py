@@ -16,6 +16,47 @@ from serial.tools import list_ports
 
 from client import ProtocolError, SerialClient, board_from_reply
 
+# ── Colour palette ─────────────────────────────────────────────────────────
+BG        = "#0a0f2c"   # dark navy background
+BG_PANEL  = "#0d1540"   # slightly lighter panel surface
+NEON_BLUE = "#00cfff"   # neon cyan-blue for X marks and accents
+NEON_RED  = "#ff2d55"   # neon red for O marks and warnings
+WHITE     = "#ffffff"
+FG_DIM    = "#7a9abf"   # muted text for labels and log
+
+def _apply_theme(root: tk.Tk) -> None:
+    """Configure ttk styles and root background for the dark/neon theme."""
+    root.configure(bg=BG)
+
+    style = ttk.Style(root)
+    # Use a base theme that exposes enough options; 'clam' works on all platforms.
+    style.theme_use("clam")
+
+    style.configure(".",
+        background=BG, foreground=WHITE,
+        fieldbackground=BG_PANEL, bordercolor=NEON_BLUE,
+        troughcolor=BG_PANEL, selectbackground=NEON_BLUE,
+        selectforeground=BG, font=("Segoe UI", 10))
+
+    style.configure("TFrame",  background=BG)
+    style.configure("TLabel",  background=BG, foreground=WHITE)
+
+    style.configure("TButton",
+        background=BG_PANEL, foreground=NEON_BLUE,
+        bordercolor=NEON_BLUE, focuscolor=NEON_BLUE,
+        padding=(8, 4))
+    style.map("TButton",
+        background=[("active", NEON_BLUE), ("disabled", BG_PANEL)],
+        foreground=[("active", BG),        ("disabled", FG_DIM)])
+
+    style.configure("TCombobox",
+        fieldbackground=BG_PANEL, background=BG_PANEL,
+        foreground=WHITE, arrowcolor=NEON_BLUE,
+        bordercolor=NEON_BLUE, selectbackground=NEON_BLUE)
+    style.map("TCombobox",
+        fieldbackground=[("readonly", BG_PANEL)],
+        foreground=[("disabled", FG_DIM)])
+
 
 # Translate protocol tokens into messages. BAD/BADCMD support both the current
 # firmware spelling and the assignment reference spelling.
@@ -53,6 +94,7 @@ class App:
         root.title("STM32 · Tic-Tac-Toe")
         root.minsize(440, 540)
         root.protocol("WM_DELETE_WINDOW", self.quit)
+        _apply_theme(root)
 
         # pack() arranges the main sections vertically. grid() is used inside
         # a separate frame for the nine board cells; each parent uses one layout.
@@ -63,11 +105,13 @@ class App:
             frame,
             text="STM32 Tic-Tac-Toe",
             font=("Segoe UI", 20, "bold"),
+            foreground=NEON_BLUE,
         ).pack(anchor="w")
 
         ttk.Label(
             frame,
             text="Two players · one board · STM32 referee",
+            foreground=FG_DIM,
         ).pack(anchor="w", pady=(0, 16))
 
         # Serial connection controls
@@ -99,7 +143,11 @@ class App:
                 text="",
                 font=("Segoe UI", 26, "bold"),
                 width=3,
-                relief="groove",
+                relief="flat",
+                bg=BG_PANEL, fg=WHITE,
+                activebackground=NEON_BLUE, activeforeground=BG,
+                disabledforeground=FG_DIM,
+                highlightbackground=NEON_BLUE, highlightthickness=1,
                 command=lambda n=i: self.send(f"MOVE:{n}"),
             )
             button.grid(row=i // 3, column=i % 3, sticky="nsew", padx=2, pady=2)
@@ -135,7 +183,13 @@ class App:
         self.disconnect_button.pack(side="right")
 
         # Traffic log and initial display
-        self.log = tk.Text(frame, height=5, state="disabled", font=("Consolas", 9))
+        self.log = tk.Text(
+            frame, height=5, state="disabled",
+            font=("Consolas", 9),
+            bg=BG_PANEL, fg=FG_DIM,
+            insertbackground=NEON_BLUE,
+            relief="flat", borderwidth=0,
+        )
         self.log.pack(fill="x")
 
         self.refresh()
@@ -175,9 +229,11 @@ class App:
         self.resign_button.configure(state="normal" if available and self.playing else "disabled")
 
         for i, button in enumerate(self.cells):
-            # The board changes only when a valid server board response arrives.
+            mark = self.board[i]
+            colour = NEON_BLUE if mark == "X" else NEON_RED if mark == "O" else WHITE
             button.configure(
-                text="" if self.board[i] == "-" else self.board[i],
+                text="" if mark == "-" else mark,
+                fg=colour,
                 state="normal" if available and self.playing else "disabled",
             )
 
