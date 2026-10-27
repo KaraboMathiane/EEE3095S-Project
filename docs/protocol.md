@@ -1,151 +1,182 @@
 # Serial Game Server Protocol
 
-## Purpose and authority
+The STM32 owns the board, turn, move validation and result. The PC submits
+commands and displays confirmed replies. Both players share one PC client in
+two-player mode; in AI mode the human is X and the STM32 is O.
 
-The STM32 owns the game board, turn, legality checks, and terminal result. The
-PC client sends commands and displays server replies; it does not authoritatively
-change the board. This contract follows the Tic-Tac-Toe reference protocol in
-the assignment brief.
-
-## Transport and framing
+## Connection and framing
 
 | Setting | Value |
-| --- | --- |
-| Baud rate | 115200 |
-| Data bits | 8 |
-| Parity | None |
-| Stop bits | 1 |
+|---|---|
+| Peripheral | USART1: PA9 TX, PA10 RX, alternate function 1 |
+| Serial format | 115200 baud, 8 data bits, no parity, 1 stop bit |
 | Flow control | None |
-| Encoding | ASCII |
-| Frame terminator | LF (`\n`); CRLF is also accepted |
-| Maximum command length | 32 bytes, excluding the terminator |
+| MCU clock | Reset-default 8 MHz HSI |
+| Encoding | Printable ASCII, case-sensitive |
+| Terminator | LF (`\n`); incoming CRLF also accepted |
+| Maximum command | 32 bytes, excluding the terminator |
+| Incomplete-frame timeout | 1000 serviced milliseconds without a consumed byte |
 
-The initial firmware uses USART1 at 115200 8N1. On the STM32F051C8T6, the
-assumed pins are PA9 (USART1_TX) and PA10 (USART1_RX), alternate function 1.
-Connect the board to a 3.3 V USB-to-UART adapter with TX and RX crossed and
-ground shared. Do not connect a 5 V UART signal to the MCU. The firmware uses
-the reset-default 8 MHz HSI clock; verify this clock and pin assignment against
-the actual board before wiring.
+Use a 3.3 V logic-level UART connection, crossed TX/RX and shared GND.
+The course board uses separate programming/power and UART USB connections.
 
-Frames are newline-terminated and contain printable ASCII command bytes only.
-The firmware buffers at most 32 command bytes.
-After an overlong frame it discards input through the next LF and replies
-`NACK:BAD`. An incomplete frame is discarded after a one-second inter-byte
-timeout and also receives `NACK:BAD`. Replies are ASCII and LF-terminated.
-Only complete, valid commands can change game state.
+Send one command and wait for its complete reply before sending the next.
+Replies end in LF. Empty lines, unknown commands, invalid characters and
+oversized frames receive `NACK:BAD`. CR is permitted only immediately before
+LF. Oversized/invalid frames are discarded through LF; an incomplete frame
+is cleared after the timeout. Rejected requests leave game state unchanged.
 
-## Board representation
+USART1 interrupts capture bytes and error markers into a 128-entry ring
+(127 usable entries). Main performs framing and command handling. Receive
+errors or detected queue overflow mark the affected frame invalid. Buffering
+allows LCD/button work while bytes arrive; unlimited sustained traffic is
+not supported. No checksum or CRC is implemented.
 
-The board is represented by exactly nine characters, indexed from 0 through
-8 in row-major order:
+## Board encoding
+
+Nine characters represent cells in row-major order:
 
 ```text
 0 | 1 | 2
---+---+--
 3 | 4 | 5
---+---+--
 6 | 7 | 8
 ```
 
-`X` and `O` identify occupied cells; `-` identifies an empty cell. X moves
-first. For example, `X-O--O---` represents X in cells 0 and 2 and O in cells
-1 and 5. The board string is included in `OK:BOARD:` and `BOARD:` responses.
+`X` and `O` are occupied cells; `-` is empty. X starts.
+For example, `X-O--O---` places X at 0 and O at 2 and 5.
+Both `OK:BOARD:` and `BOARD:` prefixes are followed by exactly nine cells.
 
 ## Commands and replies
 
-### Optional STM32 AI mode
+| Command | Requirement | Successful reply / effect |
+|---|---|---|
+| `CONNECT` | Any state | `OK`; establishes an idle session if disconnected |
+| `NEW` | Connected | `OK:BOARD:---------`; starts/restarts two-player mode |
+| `NEW:AI` | Connected | `OK:BOARD:---------`; starts/restarts AI mode |
+| `MOVE:<index>` | Running game | `OK:BOARD:<cells>`, or `WIN:X`, `WIN:O`, `DRAW` |
+| `STATE` | Connected with a started game | `BOARD:<cells>`; also works after game over |
+| `RESIGN` | Running game | `OK:GAMEOVER`; ends the game, preserving cells |
+| `DISCONNECT` | Any state | `OK`; clears session, game and AI mode |
 
-`NEW:AI` starts a fresh game with the human as X and the STM32 as O, replying
-`OK:BOARD:---------`. `NEW` always starts standard two-player mode. Both require
-an established session. No additional dependency or PC-side AI is used.
+CONNECT is idempotent during an established session: it does not reset an
+existing game. NEW and NEW:AI can restart from any connected state, including
+mid-game. DISCONNECT is also accepted when already disconnected.
 
-In AI mode, `MOVE:<index>` submits X's move. If play continues, the STM32
-selects O's move using deterministic minimax with alpha-beta pruning and
-applies it through the same game validator. One reply returns the board after
-both moves, or the terminal WIN/DRAW token. The client fetches STATE after a
-terminal token as before. No second client MOVE is needed for O. Rejected
-human requests trigger no AI move. A client request during an O turn is
-rejected with `NACK:NOTURN`; normal synchronous exchanges finish on X's turn.
+`<index>` contains one or more decimal digits. Leading zeros are accepted;
+signs, spaces and empty/non-decimal indices are malformed. Values 0--8
+identify cells. Commands do not carry a player identity.
 
-The search prefers quicker wins and postpones losses, breaking equal scores
-by centre, corners, then edges. Search modifies state copies only and uses no
-heap allocation. RESIGN, STATE and DISCONNECT retain their existing meanings;
-disconnect clears AI mode. Button/LED behaviour is unchanged. O's indicator
-may be too brief to see because its computation is synchronous.
+## Errors and validation order
 
-Each command is one line. Command names and reply tokens are case-sensitive.
+| Reply | Meaning |
+|---|---|
+| `NACK:BAD` | Invalid frame, unknown command or malformed index |
+| `NACK:RANGE` | Numeric index outside 0--8 |
+| `NACK:NOTURN` | MOVE during O's turn in a playing AI game |
+| `NACK:NOGAME` | Required session or started game does not exist |
+| `NACK:ILLEGAL` | MOVE or RESIGN after game over |
+| `NACK:OCCUPIED` | Target cell already contains a mark |
 
-| GUI to STM32 | STM32 to GUI | Meaning |
-| --- | --- | --- |
-| `CONNECT` | `OK` | Establish a session. The server is idle. |
-| `NEW` | `OK:BOARD:<9 chars>` | Start a game and return the empty board. |
-| `MOVE:<index>` | `OK:BOARD:<9 chars>` | Accept a legal move and return the updated board. |
-| `MOVE:<index>` | `WIN:X`, `WIN:O`, or `DRAW` | Report a terminal move. |
-| `MOVE:<index>` | `NACK:OCCUPIED`, `NACK:ILLEGAL`, or `NACK:RANGE` | Reject a move; board remains unchanged. |
-| `STATE` | `BOARD:<9 chars>` | Return the current board. |
-| `RESIGN` | `OK:GAMEOVER` | Forfeit the current game. |
-| `DISCONNECT` | `OK` | End the session. |
-| Malformed command / no game | `NACK:BAD` / `NACK:NOGAME` | Reject a malformed or unknown command / command requiring a game. |
+After framing, MOVE checks decimal syntax, range, then the AI turn guard.
+The game engine then checks session/game existence, playing status and cell
+occupancy. The first failed check determines the reply. For example,
+`MOVE:9` returns `NACK:RANGE` even without a game; a valid `MOVE:0` without
+a game returns `NACK:NOGAME`.
 
-`<index>` is a non-negative decimal integer. Indices 0 through 8 identify
-board cells; any other numeric index receives `NACK:RANGE`. A non-decimal or
-empty index is malformed and receives `NACK:BAD`. A move into an occupied
-cell receives `NACK:OCCUPIED`. A move after a game has ended receives
-`NACK:ILLEGAL`. Commands that require an active session/game when none exists
-receive `NACK:NOGAME`.
+A rejection changes neither board, turn nor result, and triggers no AI move.
 
-`NEW` starts a fresh game with X to move. For a legal, non-terminal move the
-server changes the turn and returns `OK:BOARD:<board>`. A winning or drawing
-move returns `WIN:X`, `WIN:O`, or `DRAW` instead. Rejected requests do not
-change the board or turn. `STATE` returns the board but does not start or
-resume a game.
+## Game modes and terminal results
 
-`RESIGN` ends a running game without changing the board. `DISCONNECT` ends
-the session and clears its game. `CONNECT` is idempotent while connected; a
-new connection starts idle and requires `NEW` before game commands can be
-used.
+In two-player mode each accepted move uses the server's current mark, then
+switches turns unless terminal. The client cannot choose a mark or prove
+which person submitted the request.
 
-## Example exchange
+In AI mode one MOVE submits X's action. If the game continues, the STM32
+chooses and validates O's action before replying. A non-terminal board reply
+therefore includes both marks and returns control to X. No second MOVE is
+needed for O. The AI uses minimax with alpha-beta pruning, preferring earlier
+wins and later losses; equal scores favour centre, corners, then edges.
+Search uses state copies and no heap allocation.
+
+A terminal MOVE returns only `WIN:X`, `WIN:O` or `DRAW`. The client must send
+STATE to obtain the final board. Further moves return `NACK:ILLEGAL`;
+NEW/NEW:AI starts another game. RESIGN ends the game without a winner token.
+
+Lifecycle states are represented by game flags/result:
+
+- **IDLE:** boot/disconnected, or connected before the first game.
+- **IN_PROGRESS:** a started game with result PLAYING.
+- **GAME_OVER:** win, draw or resignation; STATE remains available.
+
+The separate connection flag determines whether NEW/NEW:AI is allowed.
+
+## Example: AI game and rejected move
+
+Each line below is terminated by LF on the wire.
 
 ```text
-GUI -> STM32: CONNECT
-STM32 -> GUI: OK
-GUI -> STM32: NEW
-STM32 -> GUI: OK:BOARD:---------
-GUI -> STM32: MOVE:4
-STM32 -> GUI: OK:BOARD:----X----
-GUI -> STM32: MOVE:4
-STM32 -> GUI: NACK:OCCUPIED
-GUI -> STM32: STATE
-STM32 -> GUI: BOARD:----X----
-GUI -> STM32: DISCONNECT
-STM32 -> GUI: OK
+PC -> STM32: CONNECT
+STM32 -> PC: OK
+PC -> STM32: NEW:AI
+STM32 -> PC: OK:BOARD:---------
+PC -> STM32: MOVE:0
+STM32 -> PC: OK:BOARD:X---O----
+PC -> STM32: MOVE:4
+STM32 -> PC: NACK:OCCUPIED
+PC -> STM32: STATE
+STM32 -> PC: BOARD:X---O----
+PC -> STM32: DISCONNECT
+STM32 -> PC: OK
 ```
 
-The optional checksum suffix mentioned in the assignment is not used in this
-baseline. The maximum frame length, newline terminator, timeout recovery, and
-explicit rejection replies provide the initial framing and parser contract.
-Any protocol changes must be documented here and kept consistent in the GUI,
-firmware, and tests.
+## PC client behaviour
 
-## On-board hardware behaviour
+The GUI serialises exchanges in a worker thread and processes results through
+a queue on the Tk thread. It checks ASCII framing, board length/symbols and
+command-specific replies before updating cells. Serial reads/writes use
+two-second timeouts; reply reads are capped at 65 bytes. A timeout or invalid
+reply closes the connection to avoid misidentifying late replies. Reconnect
+and start a new game to recover.
 
-The eight PB0--PB7 LEDs additionally display the number of occupied cells as
-a cumulative bar, saturating at eight. New game/disconnect clears the bar;
-terminal games retain it. Rejected requests do not advance it, while an AI
-exchange can advance it by two. The local indicator-toggle button controls
-both this bar and the red/green status indicators, without affecting the LCD,
-game state or serial protocol.
+STATE returns cells only, not mode, turn or terminal metadata. The GUI does
+not resume an unknown game after connecting: the user starts NEW or NEW:AI.
 
-The on-board user button and status LEDs operate locally and do not change the
-serial protocol or game state. The firmware assumes an active-low user button
-on PA0 with an internal pull-up, and active-low red and green LEDs on PB10 and
-PB11; verify these assignments and polarities against the actual UCT STM board.
-PB0 through PB7 are configured as outputs and held low because they are not
-used by the game.
-While a game is in progress, the red LED indicates X's turn and the green LED
-indicates O's turn. After a win, draw, or resignation, both LEDs blink. A
-button press stable for 30 ms toggles the status indicators on or off. Game-
-over blinking toggles every 250 ms. The button does not reset or start a game,
-avoiding an unreported board change that would leave the PC display out of
-sync.
+## Local LCD, LEDs and buttons
+
+These features send no unsolicited serial messages and never change game state.
+
+| Hardware | Behaviour |
+|---|---|
+| LCD board view | Nine cells separated by `/`, AI/2P mode, turn or result |
+| LCD summary view | Mode, occupied-cell count and turn, or final result/count |
+| PB0--PB7 | Active-high cumulative move bar; saturates at eight for eight/nine marks |
+| PB10/PB11 | Red/green turn indicators; both toggle every 250 serviced ms after game over |
+| SW0 / PA0 | Active-low pull-up input; toggles all game LEDs, not the LCD |
+| SW1 / PA1 | Active-low pull-up input; toggles LCD board/summary view |
+
+The progress bar clears on NEW/NEW:AI or DISCONNECT and retains its value at
+game over. Rejections do not advance it; AI exchanges normally add two marks.
+The existing status-LED driver uses active-low output logic; confirm actual
+colour/polarity on the fitted board. AI O-turn indication may not be visible
+because search is synchronous.
+
+PA0 uses three matching 10 ms samples. PA1 uses 30 consecutive serviced
+millisecond samples for both press and release. Holds do not repeat toggles.
+The view defaults to board after reset and persists across new games.
+Before a game exists, both views show connection/waiting information.
+
+LCD wiring: RS=PC14, E=PC15, D4=PB8, D5=PB9, D6=PA12, D7=PA15;
+backlight control=PC13 and R/W is grounded. LCD writes occur only when the
+formatted screen changes. The polling-based servicing means prolonged work
+can delay local blink/debounce timing.
+
+## Differences from the assignment reference
+
+- Empty cells use `-` rather than `.`.
+- Malformed input uses `NACK:BAD` rather than `NACK:BADCMD`.
+- `NACK:ILLEGAL` is the documented post-game rejection.
+- `NEW:AI` adds the optional MCU opponent; NEW retains two-player mode.
+- `NACK:NOTURN` protects AI-mode turn ownership; two-player mode shares one client.
+
+Terminal result tokens and the follow-up STATE request retain the reference
+protocol's separation of result and board. The optional checksum is omitted.
