@@ -4,6 +4,10 @@ A Tic-Tac-Toe game with an STM32F051 server and a Python desktop GUI.
 The STM32 enforces the rules and supports both two-player and AI modes.
 The board also displays game information on its LCD and LEDs.
 
+## Demonstration
+
+[Watch the project demonstration on Google Drive](https://drive.google.com/file/d/15558NFGJvLwLwWoGQN0JIwjosPd-enzs/view)
+
 ## Requirements
 
 - UCT STM32F051 development board with LCD and USB-to-UART adapter.
